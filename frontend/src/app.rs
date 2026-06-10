@@ -1080,7 +1080,9 @@ impl eframe::App for Myapp{
                             uid: bilibili_ticket.uid.clone(),
                             project_id: self.ticket_id.clone(),
                             cookie_manager: cookie_manager.clone(),
+                            referer_link : bilibili_ticket.referer.clone(),
                         });
+                        log::debug!("referer_link: {}", bilibili_ticket.referer.clone());
                         match self.task_manager.submit_task(request) {
                             Ok(task_id) => {
                                 log::info!("提交获取project请求，任务ID: {}", task_id);

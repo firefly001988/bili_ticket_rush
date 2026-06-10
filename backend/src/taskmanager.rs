@@ -283,9 +283,10 @@ impl TaskManager for TaskManagerImpl {
                                     let result_tx = result_tx.clone();
                                     let project_id = get_ticketinfo_req.project_id.clone();
                                     let uid = get_ticketinfo_req.uid.clone();
+                                    let referer_link = get_ticketinfo_req.referer_link.clone();
                                     tokio::spawn(async move{
                                         log::debug!("正在获取project{}",task_id);
-                                        let response  = get_project(cookie_manager, &project_id).await;
+                                        let response  = get_project(cookie_manager, &project_id, &referer_link).await;
                                         let success = response.is_ok();
                                         let ticket_info = match &response{
                                             Ok(info) => {
@@ -375,6 +376,7 @@ impl TaskManager for TaskManagerImpl {
                                     let skip_words= grab_ticket_req.skip_words.clone();
                                     let mut rng = StdRng::from_entropy();
                                     let mut is_hot = grab_ticket_req.is_hot.clone();
+                                    let referer_link = grab_ticket_req.biliticket.referer.clone();
                                     let mut cpdd = if project_info.is_some(){
                                         Arc::new(Mutex::new(CTokenGenerator::new(
                                             project_info.clone().unwrap().sale_begin.unwrap_or(
@@ -710,7 +712,7 @@ impl TaskManager for TaskManagerImpl {
                                                     log::debug!("project_id: {}, screen_id: {}, ticket_id: {}", project_id, screen_id, ticket_id);
                                                     
                                                     // 获取项目数据
-                                                    let project_data = match get_project(cookie_manager.clone(), project_id.clone().as_str()).await {
+                                                    let project_data = match get_project(cookie_manager.clone(), project_id.clone().as_str(), &referer_link).await {
                                                         Ok(data) => data,
                                                         Err(e) => {
                                                             log::error!("获取项目数据失败，原因：{}", e);
@@ -1016,6 +1018,7 @@ impl TaskManager for TaskManagerImpl {
                     project_id: get_ticketinfo_req.project_id.clone(),
                     status: TaskStatus::Running,
                     start_time: Some(std::time::Instant::now()),
+                    referer_link : get_ticketinfo_req.referer_link.clone(),
                     cookie_manager: get_ticketinfo_req.cookie_manager.clone(), 
                 };
                 self.running_tasks.insert(task_id.clone(),Task::GetTicketInfoTask(task));

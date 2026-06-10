@@ -421,30 +421,22 @@ impl CookieManager {
         self.prepare_request(builder)
     }
 
-    // 创建具有自定义标头的请求
+    // 创建具有自定义标头的请求 - 优先使用传入的headers
     pub async fn get_with_headers(&self, url: &str, headers: HashMap<&str, &str>) -> reqwest::RequestBuilder {
-        let mut builder = self.get(url).await;
-        for (key, value) in headers {
-            builder = builder.header(key, value);
-        }
+        let builder = self.client.get(url);
+        let builder = self.prepare_request_with_overrides(builder, &headers);
         builder
     }
     
     pub async fn post_with_headers(&self, url: &str, headers: HashMap<&str, &str>) -> reqwest::RequestBuilder {
-        let mut builder = self.post(url).await;
-        for (key, value) in headers {
-            builder = builder.header(key, value);
-        }
+        let builder = self.client.post(url);
+        let builder = self.prepare_request_with_overrides(builder, &headers);
         builder
     }
-    
-    // 临时覆盖 UA
-    pub async fn with_custom_ua(&self, builder: reqwest::RequestBuilder, ua: &str) -> reqwest::RequestBuilder {
-        builder.header(reqwest::header::USER_AGENT, ua)
-    }
 
-    fn prepare_request(&self, mut builder: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
-        // 1. 先添加所有 cookie - 覆盖内部 cookie_store 的值
+    // 处理请求头，允许传入的headers覆盖默认值
+    fn prepare_request_with_overrides(&self, mut builder: reqwest::RequestBuilder, custom_headers: &HashMap<&str, &str>) -> reqwest::RequestBuilder {
+        // 1. 先添加所有 cookie
         let cookies = self.cookies.cookies_map.lock().unwrap();
         
         if !cookies.is_empty() {
@@ -455,16 +447,34 @@ impl CookieManager {
                 
             builder = builder.header(reqwest::header::COOKIE, cookie_header);
         }
+        drop(cookies);
         
-        // 2. 根据创建类型添加其他头
+        // 2. 先添加自定义headers（这样可以覆盖后续的默认值）
+        for (key, value) in custom_headers {
+            builder = builder.header(*key, *value);
+        }
+        
+        // 3. 根据创建类型添加其他默认头（但不覆盖已设置的自定义头）
         let builder = match self.create_type {
             0 => {
-                // Web 请求头
+                // Web 请求头 - 只有在自定义headers中没有设置时才使用默认值
                 if let Some(web_data) = &self.web_data {
+                    let builder = if !custom_headers.contains_key("User-Agent") {
+                        builder.header("User-Agent", &web_data.ua)
+                    } else {
+                        builder
+                    };
+                    let builder = if !custom_headers.contains_key("Referer") {
+                        builder.header("Referer", "https://show.bilibili.com/")
+                    } else {
+                        builder
+                    };
+                    let builder = if !custom_headers.contains_key("Origin") {
+                        builder.header("Origin", "https://show.bilibili.com")
+                    } else {
+                        builder
+                    };
                     builder
-                        .header("User-Agent", &web_data.ua)
-                        .header("Referer", "https://show.bilibili.com/")
-                        .header("Origin", "https://show.bilibili.com")
                 } else {
                     builder
                 }
@@ -472,9 +482,12 @@ impl CookieManager {
             1 => {
                 // App 请求头
                 if let Some(app_data) = &self.app_data {
+                    let builder = if !custom_headers.contains_key("x-bili-aurora-zone") {
+                        builder.header("x-bili-aurora-zone", "sh")
+                    } else {
+                        builder
+                    };
                     builder
-                        .header("x-bili-aurora-zone", "sh")
-                        // 其他 app 相关头
                 } else {
                     builder
                 }
@@ -483,6 +496,16 @@ impl CookieManager {
         };
         
         builder
+    }
+    
+    // 临时覆盖 UA
+    pub async fn with_custom_ua(&self, builder: reqwest::RequestBuilder, ua: &str) -> reqwest::RequestBuilder {
+        builder.header(reqwest::header::USER_AGENT, ua)
+    }
+
+    fn prepare_request(&self, builder: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+        // 使用新的方法，传入空的自定义headers
+        self.prepare_request_with_overrides(builder, &HashMap::new())
     }
     
     //处理响应中的 cookie

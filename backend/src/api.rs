@@ -154,8 +154,12 @@ pub async fn get_buyer_info(cookie_manager: Arc<CookieManager>) -> Result<BuyerI
     }
 }
 
-pub async fn get_project(cookie_manager: Arc<CookieManager>, project_id : &str) -> Result<InfoResponse,String>{
-    let req = cookie_manager.get(format!("https://show.bilibili.com/api/ticket/project/getV2?id={}",project_id).as_str()).await;
+pub async fn get_project(cookie_manager: Arc<CookieManager>, project_id : &str, referer_link: &str) -> Result<InfoResponse,String>{
+    let replace_referer: HashMap<&str, &str> = HashMap::from([
+        ("Referer", referer_link),
+       
+    ]);
+    let req = cookie_manager.get_with_headers(format!("https://show.bilibili.com/api/ticket/project/getV2?id={}&project_id={}",project_id, project_id).as_str(),replace_referer).await;
     let response = req.send().await;
     let result = match response {
         Ok(resp)=>{

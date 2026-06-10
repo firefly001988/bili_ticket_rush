@@ -49,7 +49,17 @@ fn ticket_input_area(ui: &mut egui::Ui, app: &mut Myapp) {
 
         //抢票按钮
         if styled_grab_button(ui).clicked() {
-            if !check_input_ticket(&mut app.ticket_id) {app.show_log_window = true; return};
+            let (project_id, referer) = match check_input_ticket(&app.ticket_id) {
+                Some(res) => {
+                    app.ticket_id = res.0.clone();
+                    
+                    res
+                },
+                None => {
+                    app.show_log_window = true;
+                    return;
+                }
+            };
             if app.account_manager.accounts.is_empty() {
                 log::info!("没有可用账号，请登录账号");
                 app.show_login_windows = true;
@@ -74,7 +84,8 @@ fn ticket_input_area(ui: &mut egui::Ui, app: &mut Myapp) {
 
                 &app.push_config,
                 &app.status_delay,
-                &app.ticket_id,
+                &project_id,
+                &referer,
             );
             app.bilibiliticket_list.push(bilibili_ticket);
             log::debug!("当前抢票对象列表：{:?}", app.bilibiliticket_list);
@@ -325,48 +336,34 @@ fn styled_grab_button(ui: &mut egui::Ui) -> egui::Response {
     }).inner
 }
 
-fn check_input_ticket(ticket_id: &mut String) -> bool{
-    //检查输入的票务ID是否有效
-    if ticket_id.is_empty(){
+fn check_input_ticket(ticket_input: &str) -> Option<(String, String)> {
+    if ticket_input.is_empty() {
         log::info!("请输入有效的票务id");
-        return false;
+        return None;
     }
-    if ticket_id.contains("https") {
-        if let Some(position) = ticket_id.find("id="){
-            let mut id = ticket_id.split_off(position+3);
-            if id.contains("&") {
-                let position = id.find("&").unwrap();
-                id.truncate(position);
+
+    if ticket_input.contains("https") {
+        if let Some(id_start) = ticket_input.find("id=") {
+            let id_str = &ticket_input[id_start + 3..];
+            let id_str = id_str.split('&').next().unwrap_or(id_str);
+            
+            if (5..=8).contains(&id_str.len()) && id_str.parse::<u32>().is_ok() {
+                log::info!("获取到的id为：{}", id_str);
+                return Some((id_str.to_string(), ticket_input.to_string()));
             }
-            if id.len() == 5 || id.len() == 6 {
-                match id.parse::<u32>(){
-                    Ok(_) => {
-                        log::info!("获取到的id为：{}", id);
-                        *ticket_id = id;
-                        return true;
-                    }
-                    Err(_) => {
-                        log::error!("输入的id不合法，请检查输入，可尝试直接输入id");
-                        return false;
-                    }
-                }
-            }
-
-
-
-        }else{
-            log::error!("未找到对应的id，请不要使用b23开头的短连接，正确链接以show.bilibili或mall.bilibili开头");
-            return false;
+            log::error!("输入的id不合法，请检查输入，可尝试直接输入id");
+            return None;
         }
+        log::error!("未找到对应的id，请不要使用b23开头的短连接，正确链接以show.bilibili或mall.bilibili开头");
+        return None;
     }
-    match ticket_id.parse::<u32>() {
-        Ok(_) => {
-            log::info!("获取到的id为：{}", ticket_id);
-            return true;
-        }
-        Err(_) => {
-            log::error!("输入的id不是数字类型，请检查输入");
-        }
+
+    if ticket_input.parse::<u32>().is_ok() {
+        log::info!("获取到的id为：{}", ticket_input);
+        let referer = format!("https://show.bilibili.com/platform/detail.html?id={}", ticket_input);
+        return Some((ticket_input.to_string(), referer));
     }
-    return false;
+    
+    log::error!("输入的id不是数字类型，请检查输入");
+    None
 }

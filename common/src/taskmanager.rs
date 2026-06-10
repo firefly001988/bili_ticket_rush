@@ -141,6 +141,7 @@ pub struct GetTicketInfoRequest {
     pub task_id : String,
     pub project_id : String,
     pub cookie_manager: Arc<CookieManager>,
+    pub referer_link : String,
 
 }
 
@@ -159,6 +160,7 @@ pub struct GetTicketInfoTask {
     pub project_id : String,
     pub status: TaskStatus,
     pub start_time : Option<Instant>,
+    pub referer_link : String,
     pub cookie_manager: Arc<CookieManager>,
 }
 

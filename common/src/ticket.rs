@@ -98,6 +98,7 @@ pub struct BilibiliTicket{
 
     //抢票相关
     pub project_id: String,
+    pub referer: String,
     pub screen_id: String,
     pub id_bind: usize, //是否绑定
 
@@ -125,6 +126,7 @@ impl BilibiliTicket{
         push_self: &PushConfig,
         status_delay: &usize,
         project_id : &str,
+        referer : &str,
 
 
     ) -> Self{
@@ -184,6 +186,7 @@ impl BilibiliTicket{
             captcha_use_type: captcha_type,
             cookie_manager: None,
             project_id: project_id.to_string(),
+            referer: referer.to_string(),
             screen_id: String::new(),
             project_info: None,
             buyer_info: None,
