@@ -5,160 +5,226 @@ use rand::{Rng, thread_rng};
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-//感谢https://github.com/mikumifa/biliTickerBuy/pull/726/commits/0ff6218da458c41df89956384b8f192c7e7eae20
-// 提供的CToken生成代码
-//本代码依据上述代码
-
-pub struct CTokenGenerator {
-    touch_event: i32,
-    isibility_change: i32,
-    page_unload: i32,
-    timer: i32,
-    time_difference: i32,
-    scroll_x: i32,
-    scroll_y: i32,
-    inner_width: i32,
-    inner_height: i32,
-    outer_width: i32,
-    outer_height: i32,
+// ============================================================
+// EncodeData: 浏览器/屏幕统计数据，用于计算 CToken 各字段值
+// ============================================================
+pub struct EncodeData {
+    pub ua: String,
+    pub href: String,
+    pub device_pixel_ratio: f64,
+    pub scroll_x: i32,
+    pub scroll_y: i32,
+    pub inner_width: i32,
+    pub inner_height: i32,
+    pub outer_width: i32,
+    pub outer_height: i32,
     pub screen_x: i32,
     pub screen_y: i32,
     pub screen_width: i32,
     pub screen_height: i32,
-    screen_avail_width: i32,
-    pub ticket_collection_t: i64,
-    pub time_offset: i64,
-    pub stay_time: i32,
+    pub avail_width: i32,
+    pub avail_height: i32,
+    pub history_length: i32,
 }
 
-impl CTokenGenerator {
-    pub fn new(ticket_collection_t: i64, time_offset: i64, stay_time: i32) -> Self {
-        CTokenGenerator {
-            touch_event: 0,
-            isibility_change: 0,
-            page_unload: 0,
-            timer: 0,
-            time_difference: 0,
+impl EncodeData {
+    pub fn new(ua: String, href: String) -> Self {
+        let mut rng = thread_rng();
+        let ratios: [f64; 4] = [1.0, 1.25, 1.5, 2.0];
+        EncodeData {
+            ua,
+            href,
+            device_pixel_ratio: ratios[rng.gen_range(0..4)],
             scroll_x: 0,
             scroll_y: 0,
-            inner_width: 0,
-            inner_height: 0,
-            outer_width: 0,
-            outer_height: 0,
+            inner_width: rng.gen_range(1500..1700),
+            inner_height: rng.gen_range(700..900),
+            outer_width: rng.gen_range(1500..1700),
+            outer_height: rng.gen_range(800..1000),
             screen_x: 0,
             screen_y: 0,
-            screen_width: 0,
-            screen_height: 0,
-            screen_avail_width: 0,
-            ticket_collection_t,
-            time_offset,
-            stay_time,
+            screen_width: rng.gen_range(1500..1700),
+            screen_height: rng.gen_range(800..1000),
+            avail_width: rng.gen_range(1400..1600),
+            avail_height: rng.gen_range(700..900),
+            history_length: rng.gen_range(1..4),
+        }
+    }
+    
+    pub fn encode(&self, index: usize) -> i32 {
+        let now_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+            let v = self.device_pixel_ratio * 10.0;
+            
+        let arr: [i32; 16] = [
+            self.scroll_x,                                        // 0
+            self.scroll_y,                                        // 1
+            self.inner_width,                                     // 2
+            self.inner_height,                                    // 3
+            self.outer_width,                                     // 4
+            self.outer_height,                                    // 5
+            self.screen_x,                                        // 6
+            self.screen_y,                                        // 7
+            self.screen_width,                                    // 8
+            self.screen_height,                                   // 9
+            self.avail_width,                                     // 10
+            self.history_length,                                  // 11
+            self.ua.len() as i32,                                 // 12
+            self.href.len() as i32,                               // 13
+            if v == 0.0 { 10 } else { v as i32 },                 // 14
+            (now_ms % 256) as i32,                                // 15
+        ];
+
+        (arr[index % 16] + arr[(3 * index) % 16] + 17 * index as i32) & 255
+    }
+}
+
+// ============================================================
+// CTokenField: 内部字段结构，存储 encode 后的各字段值
+// ============================================================
+struct CTokenField {
+    h:      i32, // encode(1)
+    f:      i32, // 点击次数
+    y:      i32, // encode(4)
+    b:      i32, // 页面切换次数
+    z:      i32, // encode(3)
+    q:      i32, // encode(2)
+    v:      i32, // openWindow 次数
+    k:      i32, // encode(5)
+    g:      i32, // 页面停留时间(秒)
+    u:      i32, // 请求时间间隔(秒)
+    w:      i32, // encode(6)
+    j:      i32, // encode(7)
+    x:      i32, // encode(8)
+    dollar: i32, // encode(9)
+    z_big:  i32, // encode(10)
+    ee:     i32, // encode(11)
+}
+
+impl CTokenField {
+    fn from_encode_data(ecdata: &EncodeData) -> Self {
+        CTokenField {
+            h:      ecdata.encode(1),
+            f:      0,
+            y:      ecdata.encode(4),
+            b:      0,
+            z:      ecdata.encode(3),
+            q:      ecdata.encode(2),
+            v:      0,
+            k:      ecdata.encode(5),
+            g:      0,
+            u:      0,
+            w:      ecdata.encode(6),
+            j:      ecdata.encode(7),
+            x:      ecdata.encode(8),
+            dollar: ecdata.encode(9),
+            z_big:  ecdata.encode(10),
+            ee:     ecdata.encode(11),
         }
     }
 
     fn encode(&self) -> String {
-        let mut buffer = [0u8; 16];
-        let mut data_mapping = HashMap::new();
+        let mut buf = [0u8; 16];
 
-        data_mapping.insert(0, (self.touch_event, 1));
-        data_mapping.insert(1, (self.scroll_x, 1));
-        data_mapping.insert(2, (self.isibility_change, 1));
-        data_mapping.insert(3, (self.scroll_y, 1));
-        data_mapping.insert(4, (self.inner_width, 1));
-        data_mapping.insert(5, (self.page_unload, 1));
-        data_mapping.insert(6, (self.inner_height, 1));
-        data_mapping.insert(7, (self.outer_width, 1));
-        data_mapping.insert(8, (self.timer, 2));
-        data_mapping.insert(10, (self.time_difference, 2));
-        data_mapping.insert(12, (self.outer_height, 1));
-        data_mapping.insert(13, (self.screen_x, 1));
-        data_mapping.insert(14, (self.screen_y, 1));
-        data_mapping.insert(15, (self.screen_width, 1));
+        let mut field_map: HashMap<usize, (i32, usize)> = HashMap::new();
+        field_map.insert(0,  (self.h,      1));
+        field_map.insert(1,  (self.f,      1));
+        field_map.insert(2,  (self.q,      1));
+        field_map.insert(3,  (self.b,      1));
+        field_map.insert(4,  (self.z,      1));
+        field_map.insert(5,  (self.y,      1));
+        field_map.insert(6,  (self.v,      1));
+        field_map.insert(7,  (self.k,      1));
+        field_map.insert(8,  (self.g,      2));
+        field_map.insert(10, (self.u,      2));
+        field_map.insert(12, (self.w,      1));
+        field_map.insert(13, (self.j,      1));
+        field_map.insert(14, (self.x,      1));
+        field_map.insert(15, (self.dollar, 1));
 
-        let mut i = 0;
+        let mut i: usize = 0;
         while i < 16 {
-            if let Some(&(data, length)) = data_mapping.get(&i) {
+            if let Some(&(data, length)) = field_map.get(&i) {
                 if length == 1 {
-                    let value = if data > 0 {
-                        std::cmp::min(255, data)
-                    } else {
-                        data
-                    };
-                    buffer[i] = (value & 0xFF) as u8;
+                    let val = if data > 255 { 255 } else { data };
+                    buf[i] = val as u8;
                     i += 1;
-                } else if length == 2 {
-                    let value = if data > 0 {
-                        std::cmp::min(65535, data)
-                    } else {
-                        data
-                    };
-                    buffer[i] = ((value >> 8) & 0xFF) as u8;
-                    buffer[i + 1] = (value & 0xFF) as u8;
+                } else {
+                    let val = if data > 65535 { 65535 } else { data };
+                    buf[i] = ((val >> 8) & 0xFF) as u8;
+                    buf[i + 1] = (val & 0xFF) as u8;
                     i += 2;
                 }
             } else {
-                let condition_value = if (4 & self.screen_height) != 0 {
-                    self.scroll_y
-                } else {
-                    self.screen_avail_width
-                };
-                buffer[i] = (condition_value & 0xFF) as u8;
+                let fallback = if self.z_big & 4 != 0 { self.q } else { self.ee };
+                let val = if fallback > 255 { 255 } else { fallback };
+                buf[i] = val as u8;
                 i += 1;
             }
         }
 
-        let data_str: String = buffer.iter().map(|&b| b as char).collect();
-        self.to_binary(data_str)
+        let mut result = [0u8; 32];
+        for i in 0..16 {
+            result[i * 2] = buf[i];
+            result[i * 2 + 1] = 0x00;
+        }
+
+        STANDARD.encode(&result)
     }
+}
 
-    fn to_binary(&self, data_str: String) -> String {
-        let mut uint16_data = Vec::new();
-        let mut uint8_data = Vec::new();
 
-        // 第一次转换：字符串转为Uint16Array等价物
-        for char in data_str.chars() {
-            uint16_data.push(char as u16);
+pub struct CTokenGenerator {
+    field:       CTokenField,
+    when_gen:    SystemTime,
+    last_submit: SystemTime,
+}
+
+impl CTokenGenerator {
+    pub fn new(_ticket_collection_t: i64, _time_offset: i64, _stay_time: i32) -> Self {
+        let ecdata = EncodeData::new(
+            "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36".to_string(),
+            "https://show.bilibili.com".to_string(),
+        );
+
+        CTokenGenerator {
+            field:       CTokenField::from_encode_data(&ecdata),
+            when_gen:    SystemTime::now(),
+            last_submit: SystemTime::UNIX_EPOCH,
         }
-
-        // 第二次转换：Uint16Array buffer转为Uint8Array
-        for val in uint16_data {
-            uint8_data.push((val & 0xFF) as u8);
-            uint8_data.push(((val >> 8) & 0xFF) as u8);
-        }
-
-        STANDARD.encode(&uint8_data)
     }
 
     pub fn generate_ctoken(&mut self, is_create_v2: bool) -> String {
         let mut rng = thread_rng();
-        
-        self.touch_event = 255; // 触摸事件数: 手机端抓包数据
-        self.isibility_change = 2; // 可见性变化数: 手机端抓包数据
-        self.inner_width = 255; // 窗口内部宽度: 手机端抓包数据
-        self.inner_height = 255; // 窗口内部高度: 手机端抓包数据
-        self.outer_width = 255; // 窗口外部宽度: 手机端抓包数据
-        self.outer_height = 255; // 窗口外部高度: 手机端抓包数据
-        self.screen_width = 255; // 屏幕宽度: 手机端抓包数据
-        self.screen_height = rng.gen_range(1000..=3000); // 屏幕高度: 用于条件判断
-        self.screen_avail_width = rng.gen_range(1..=100); // 屏幕可用宽度: 用于条件判断
 
         if is_create_v2 {
-            // createV2阶段
-            let current_time = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
+            // createV2 阶段：累积交互次数
+            self.field.f += rng.gen_range(1..4); // 点击继续增加
+            self.field.b += rng.gen_range(1..3); // 页面切换继续增加
+            self.field.v += rng.gen_range(0..2); // openWindow 继续增加
+            self.field.g = SystemTime::now()
+                .duration_since(self.when_gen)
                 .unwrap()
-                .as_secs() as i64;
-            self.time_difference =
-                (current_time + self.time_offset - self.ticket_collection_t) as i32;
-            self.timer = self.time_difference + self.stay_time;
-            self.page_unload = 25; // 页面卸载数: 手机端抓包数据
+                .as_secs() as i32
+                + 10; // 页面停留时间
+            self.field.u = SystemTime::now()
+                .duration_since(self.last_submit)
+                .unwrap()
+                .as_secs() as i32; // 距上次提交的间隔
         } else {
-            // prepare阶段
-            self.time_difference = 0;
-            self.timer = self.stay_time;
-            self.touch_event = rng.gen_range(3..=10);
+            self.field.f = rng.gen_range(3..10); // 模拟点击次数
+            self.field.b = rng.gen_range(0..2);  // 模拟页面切换
+            self.field.v = rng.gen_range(0..3);  // 模拟 openWindow 次数
+            self.field.g = SystemTime::now()
+                .duration_since(self.when_gen)
+                .unwrap()
+                .as_secs() as i32; // 页面停留时间
+            self.field.u = 0; // 首次请求，无间隔
         }
 
-        self.encode()
+        self.last_submit = SystemTime::now();
+        self.field.encode()
     }
 }
