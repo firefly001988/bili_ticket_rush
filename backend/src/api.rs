@@ -400,7 +400,7 @@ pub async fn get_ticket_token(cookie_manager:Arc<CookieManager>,
                                 return Err(token_risk_param);
                             }
                             _ => {
-                                log::error!("获取token失败，未知错误码：{}，错误信息：{}，请提issue修复此问题", code, msg);
+                                log::error!("获取token失败，未知错误码：{}，错误信息：{}，可提issue收集此问题", code, msg);
                                 log::error!("{:?}", json);
                                 return Err(TokenRiskParam {
                                     code: code as i32,

@@ -409,6 +409,10 @@ impl CookieManager {
         cookies.get(key).cloned()
     }
 
+    pub fn get_ua(&self) -> Option<String> {
+        self.web_data.as_ref().map(|data| data.ua.clone())
+    }
+
     // 发送 GET 请求
     pub async fn get(&self, url: &str) -> reqwest::RequestBuilder {
         let builder = self.client.get(url);

@@ -383,7 +383,8 @@ impl TaskManager for TaskManagerImpl {
                                                 SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64
                                             ),
                                             0,
-                                            rng.gen_range(2000..10000)
+                                            rng.gen_range(2000..10000),
+                                            cookie_manager.get_ua().clone(),
                                             
                                         )))
                                     }else{
@@ -393,7 +394,8 @@ impl TaskManager for TaskManagerImpl {
                                             .unwrap()
                                             .as_secs() as i64, 
                                             0,
-                                            rng.gen_range(2000..10000)
+                                            rng.gen_range(2000..10000),
+                                            cookie_manager.get_ua().clone(),
                                         )))
                                     };
                                     tokio::spawn(async move{
@@ -769,7 +771,8 @@ impl TaskManager for TaskManagerImpl {
                                                                     SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64
                                                                 ), 
                                                                 0, 
-                                                                rng.gen_range(2000..10000)
+                                                                rng.gen_range(2000..10000),
+                                                                cookie_manager.get_ua().clone(),
                                                             )));
                                                             // 获取token
                                                             let token_result = get_ticket_token(
@@ -1341,7 +1344,7 @@ async fn try_create_order(
                     }
 
                     //未知错误
-                    _ => log::error!("下单失败，未知错误码：{} 可以提出issue修复该问题", e),
+                    _ => log::error!("下单失败，未知错误码：{} 可以提出issue收集上报该问题", e),
                 }
             }
         }

@@ -51,6 +51,7 @@ impl EncodeData {
         }
     }
     
+    
     pub fn encode(&self, index: usize) -> i32 {
         let now_ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -183,9 +184,10 @@ pub struct CTokenGenerator {
 }
 
 impl CTokenGenerator {
-    pub fn new(_ticket_collection_t: i64, _time_offset: i64, _stay_time: i32) -> Self {
+    pub fn new(_ticket_collection_t: i64, _time_offset: i64, _stay_time: i32, ua : Option<String>) -> Self {
+        let ua = ua.unwrap_or_else(|| "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36".to_string());
         let ecdata = EncodeData::new(
-            "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36".to_string(),
+            ua,
             "https://show.bilibili.com".to_string(),
         );
 
@@ -225,6 +227,9 @@ impl CTokenGenerator {
         }
 
         self.last_submit = SystemTime::now();
-        self.field.encode()
+        log::debug!("生成 CToken，f: {}, b: {}, v: {}, g: {}, u: {}", self.field.f, self.field.b, self.field.v, self.field.g, self.field.u);
+        let ctoken = self.field.encode();
+        log::debug!("总ctoken: {}", ctoken);
+        ctoken
     }
 }
